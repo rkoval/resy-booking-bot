@@ -16,6 +16,7 @@ object BookReservationWorkflow {
 
   /**
     * STEP 1: FIND RESERVATION (GET CONFIG ID)
+    *
     * @return
     */
   private[this] def findReservation: Future[String] = {
@@ -32,23 +33,25 @@ object BookReservationWorkflow {
 
   /**
     * STEP 2: GET RESERVATION DETAILS (GET PAYMENT ID AND BOOK TOKEN)
+    *
     * @param configId
     * @return
     */
   def getReservationDetails(configId: String) = {
-    val findResQueryParams = Map("config_id" -> configId, "day" -> day, "party_size" -> partySize)
+    val findResQueryParams = Map("config_id" -> configId, "day" -> day, "party_size" -> partySize, "commit" -> "1")
 
     sendGetRequest(ResyApiMapKeys.ReservationDetails, findResQueryParams)
   }
 
   /**
     * STEP 3: BOOK RESERVATION
+    *
     * @param resDetailsResp
     * @return
     */
   def bookReservation(resDetailsResp: String) = {
     val resDetails = Json.parse(resDetailsResp)
-    println(s"${DateTime.now} URL Response: $resDetailsResp")
+    println(s"${DateTime.now} Details URL Response: $resDetailsResp")
 
     //PaymentMethodId - Searching for this pattern - "payment_methods": [{"is_default": true, "provider_name": "braintree", "id": 123456, "display": "1234", "provider_id": 1}]
     val paymentMethodId =
@@ -75,6 +78,7 @@ object BookReservationWorkflow {
 
   /**
     * Same as Step 1 but does a retry.  Blocks because the reservation can't proceed without an available reservation
+    *
     * @param endTime
     * @return
     */
@@ -82,12 +86,12 @@ object BookReservationWorkflow {
   def retryFindReservation(endTime: Long): String = {
     val findResResp = Await.result(findReservation, 6 seconds)
 
-    println(s"${DateTime.now} URL Response: $findResResp")
+    println(s"${DateTime.now} Find Reservation URL Response: $findResResp")
 
     //ConfigId - Searching for this pattern - "time_slot": "17:15:00", "badge": null, "service_type_id": 2, "colors": {"background": "2E6D81", "font": "FFFFFF"}, "template": null, "id": 123457
 
     val results = Try(
-      (Json.parse(findResResp) \ "results" \ 0 \ "configs").get
+      (Json.parse(findResResp) \ "results" \ "venues" \ 0 \ "slots").get
         .as[JsArray]
         .value
     )
@@ -98,7 +102,7 @@ object BookReservationWorkflow {
       case Failure(_) if endTime - DateTime.now.getMillis > 0 =>
         retryFindReservation(endTime)
       case _ =>
-        throw new Exception(JsError("Could not find a reservation for the given time(s)"))
+        throw new Exception(JsError("Could not parse venues"))
     }
   }
 
@@ -109,9 +113,10 @@ object BookReservationWorkflow {
   ): String = {
     val reservation =
       Try(
-        (reservationTimes.filter(x => (x \ "time_slot").get.toString == s""""${timePref.head}"""")(
+        (reservationTimes.filter(x =>
+          (x \ "date" \ "start").get.toString == s""""${day} ${timePref.head}"""")(
           0
-        ) \ "id").get.toString
+        ) \ "config" \ "token").as[String]
       )
 
     reservation match {
@@ -121,7 +126,7 @@ object BookReservationWorkflow {
       case Failure(_) if timePref.size > 0 =>
         findReservationTime(reservationTimes, timePref.tail)
       case _ =>
-        throw new Exception(JsError("Could not find a reservation for the given time(s)"))
+        throw new Exception(JsError("Could not parse time slots"))
     }
   }
 }

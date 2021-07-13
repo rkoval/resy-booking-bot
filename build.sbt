@@ -1,6 +1,6 @@
 name := "resy-booking-bot"
 
-scalaVersion := "2.13.4"
+scalaVersion := "2.12.4"
 
 lazy val root = project in file(".")
 

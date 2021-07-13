@@ -40,6 +40,7 @@ object ResyBookingBot {
       resDetailsResp <- getReservationDetails(findResResp)
       bookResResp    <- bookReservation(resDetailsResp)
     } {
+      println(s"${DateTime.now} Book Reservation URL Response: $bookResResp")
       val resyToken =
         Try(
           (Json.parse(bookResResp) \ "resy_token").get.toString
